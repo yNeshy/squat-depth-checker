@@ -83,7 +83,47 @@ def calibrate(j: dict, cfg: Config, plate: dict | None, height_cm: float | None)
             return float(2 * np.median(r) / cfg.plate_diameter_cm), f"plate ({len(r)} frames)"
     if height_cm:
         return standing_body_px(j) / (cfg.nose_to_ankle_ratio * height_cm), f"height {height_cm:.0f} cm"
-    raise SystemExit("Could not find the plate. Re-run with --height-cm <your height> as the scale.")
+    h = cfg.assumed_height_cm
+    return (standing_body_px(j) / (cfg.nose_to_ankle_ratio * h),
+            f"ASSUMED height {h:.0f} cm (pass --height-cm for real cm values)")
+
+
+def plate_problem(j: dict, plate: dict, cfg: Config,
+                  windows: list[tuple[int, int]] | None = None) -> str | None:
+    """Why the plate track should not be trusted, or None if it looks like the real plate.
+
+    Catches the tracker locking onto another round thing (rack hardware, a plate on the
+    floor, the athlete's torso) when the real plate is out of frame: the radius jumps
+    around, and during the reps the 'plate' does not rise and fall with the shoulders.
+    `windows` are (start, end) frames of the reps; without them the whole clip is used."""
+    c = plate["circles"]
+    ok = np.isfinite(c[:, 0])
+    if ok.sum() < 10:
+        return None
+    r = c[ok, 2]
+    spread = float(np.std(r) / np.median(r))
+    if spread > cfg.plate_radius_spread:
+        return f"plate size jumps between frames ({spread * 100:.0f}% spread)"
+    sh_y = j["shoulder"][:, 1]
+    use = ok & np.isfinite(sh_y)
+    if windows:
+        in_rep = np.zeros(len(use), bool)
+        for s, e in windows:
+            in_rep[s:e + 1] = True
+        use &= in_rep
+    if use.sum() >= 10 and np.std(sh_y[use]) > 0:
+        corr = float(np.corrcoef(c[use, 1], sh_y[use])[0, 1])
+        if not corr >= cfg.plate_min_corr:
+            return f"plate does not move with the shoulders (correlation {corr:.2f})"
+    for s, e in windows or []:
+        m = use[s:e + 1]
+        if m.sum() < 5:
+            continue
+        plate_dy = float(np.ptp(c[s:e + 1, 1][m]))
+        sh_dy = float(np.nanmax(sh_y[s:e + 1]) - np.nanmin(sh_y[s:e + 1]))
+        if sh_dy > 0 and abs(plate_dy / sh_dy - 1) > cfg.plate_travel_tolerance:
+            return (f"plate moves {plate_dy:.0f} px in a rep where the shoulders move {sh_dy:.0f} px")
+    return None
 
 
 def bar_track(j: dict, plate: dict | None) -> tuple[np.ndarray, np.ndarray, float]:

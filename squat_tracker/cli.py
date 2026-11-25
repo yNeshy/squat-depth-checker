@@ -36,11 +36,28 @@ def cmd_analyse(a) -> int:
     side = a.side if a.side != "auto" else pose.pick_side(lm)
     j = pose.joints(lm, side)
 
-    plate = None if a.no_plate else bar.detect_plate(video, j, cfg, a.height_cm or 178.0)
-    px_per_cm, src = bar.calibrate(j, cfg, plate, a.height_cm)
-    bar_px, _, cov = bar.bar_track(j, plate)
+    def run(plate):
+        px_per_cm, src = bar.calibrate(j, cfg, plate, a.height_cm)
+        bar_px, _, cov = bar.bar_track(j, plate)
+        return analyse(j, bar_px, p["fps"], px_per_cm, cfg, side, src, cov), bar_px
 
-    res = analyse(j, bar_px, p["fps"], px_per_cm, cfg, side, src, cov)
+    plate = None if a.no_plate else bar.detect_plate(video, j, cfg, a.height_cm or cfg.assumed_height_cm)
+    pre_warnings = []
+    if plate is not None:
+        # reps are segmented on the hip, so they do not depend on the plate; use them to check it
+        why = bar.plate_problem(j, plate, cfg)
+        if not why:
+            first, _ = run(plate)
+            why = bar.plate_problem(j, plate, cfg, [(r.start, r.end) for r in first.reps])
+        if why:
+            pre_warnings.append(f"Plate track rejected: {why}. Bar speed uses the shoulders instead "
+                                "(less accurate). Film side-on with the whole plate in frame.")
+            plate = None
+    res, bar_px = run(plate)
+    if res.scale_source.startswith("ASSUMED"):
+        pre_warnings.append("No plate and no --height-cm: scale assumes a "
+                            f"{cfg.assumed_height_cm:.0f} cm athlete, so cm and m/s values are approximate.")
+    res.warnings[:0] = pre_warnings
     res.load_kg, res.logged_rpe = a.load, a.rpe
     check_rpe(res, cfg)
 

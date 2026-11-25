@@ -62,7 +62,8 @@ def _hip_height_for_margin(margin, torso_deg):
     return (lo + hi) / 2
 
 
-def make_set(reps: list[RepSpec], fps: float = 60.0, gap_s: float = 1.0):
+def make_set(reps: list[RepSpec], fps: float = 60.0, gap_s: float = 1.0,
+             walkout_s: float = 0.0, pause_dip_cm: float = 0.0):
     """Return (landmarks[N,33,3] in px, truth list, bar_px[N,2])."""
     stand_h, stand_t, bot_t = 88.0, 12.0, 45.0
     frames, truth = [], []
@@ -70,6 +71,9 @@ def make_set(reps: list[RepSpec], fps: float = 60.0, gap_s: float = 1.0):
     def push(h, t):
         frames.append(_pose(h, t))
 
+    # walkout: steps back from the rack, hip bobbing a few cm with each step
+    for u in np.arange(0, walkout_s, 1 / fps):
+        push(stand_h - 4.0 * abs(np.sin(np.pi * 3 * u / walkout_s)), stand_t)
     for _ in range(int(gap_s * fps)):
         push(stand_h, stand_t)
     for spec in reps:
@@ -92,9 +96,11 @@ def make_set(reps: list[RepSpec], fps: float = 60.0, gap_s: float = 1.0):
         up_s = (len(frames) - 1 - bar_lo) / fps
         truth.append(dict(start=start, bottom=bottom, travel_cm=p1[1] - p0[1],
                           mcv=(p1[1] - p0[1]) / 100 / up_s, margin=spec.bottom_margin_cm,
-                          fold=spec.fold_deg))
-        for _ in range(int(gap_s * fps)):
-            push(stand_h, stand_t)
+                          fold=spec.fold_deg, end=len(frames) - 1,
+                          descent_s=spec.down_s, up_s=spec.up_s))
+        # pause between reps: breathe and brace, hip sags slightly then resets
+        for u in np.arange(0, gap_s, 1 / fps):
+            push(stand_h - pause_dip_cm * np.sin(np.pi * u / gap_s), stand_t)
 
     n = len(frames)
     lm = np.full((n, 33, 3), np.nan)

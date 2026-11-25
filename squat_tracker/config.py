@@ -13,9 +13,23 @@ class Config:
     depth_high_cm: float = -2.0              # margin < this  -> HIGH (between = BORDERLINE)
 
     # --- rep detection ---
-    min_rep_travel_cm: float = 20.0          # bar must drop at least this far to count as a rep
-    top_tolerance_cm: float = 6.0            # back within this of standing height = rep finished
-    lockout_velocity_ms: float = 0.03        # concentric ends when bar slows below this near the top
+    min_rep_travel_cm: float = 20.0          # hip must drop at least this far to count as a rep
+    min_rep_depth_fraction: float = 0.6      # hip drop below this fraction of the set's deepest = not a rep
+    descent_start_fraction: float = 0.1      # descent starts where hip speed passes 10% of its peak
+    settle_tolerance_cm: float = 3.0       # within this of standing height = settled at the top
+    top_search_s: float = 4.0                # look this far before/after the bottom for standing height
+    lockout_velocity_ms: float = 0.03        # hip moving slower than this = stopped
+
+    # --- plausibility (warnings only) ---
+    max_descent_s: float = 4.0
+    max_concentric_s: float = 5.0
+    travel_spread: float = 0.2               # rep bar travel this far (fraction) from the set median
+
+    # --- plate track sanity ---
+    plate_radius_spread: float = 0.15        # plate radius std / median above this = wrong circles
+    plate_min_corr: float = 0.6              # plate height must follow the shoulder height
+    plate_travel_tolerance: float = 0.3      # per rep, plate travel within 30% of shoulder travel
+    assumed_height_cm: float = 178.0         # scale fallback when no plate and no --height-cm
 
     # --- velocity -> RPE (last-rep MCV, m/s). Group averages; replace with your own profile. ---
     # list of (min_mcv, rpe); first row whose min_mcv <= mcv wins

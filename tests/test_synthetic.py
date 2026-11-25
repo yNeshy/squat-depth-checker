@@ -18,11 +18,42 @@ from synth import PX_PER_CM, RepSpec, make_set, render_video  # noqa: E402
 SPECS = [RepSpec(5.0, 1.4, 0.9), RepSpec(0.0, 1.4, 1.2), RepSpec(-6.0, 1.4, 1.6, fold_deg=18.0)]
 
 
-def _run(fps=60.0):
-    lm, truth, bar_px = make_set(SPECS, fps=fps)
+def _run(fps=60.0, **kw):
+    lm, truth, bar_px = make_set(SPECS, fps=fps, **kw)
     j = pose.joints(lm, pose.pick_side(lm))
     res = analyse(j, bar_px, fps, PX_PER_CM, Config(), "left", "synthetic", 1.0)
     return res, truth
+
+
+def test_rep_timing_excludes_walkout_and_pauses():
+    """Walkout before the set and long, saggy pauses between reps must not be counted in the reps."""
+    for fps in (25.0, 60.0):
+        res, truth = _run(fps, gap_s=3.0, walkout_s=4.0, pause_dip_cm=4.0)
+        assert len(res.reps) == 3
+        for r, t in zip(res.reps, truth):
+            assert abs(r.start - t["start"]) / fps < 0.15, (fps, r.n, r.start, t["start"])
+            assert abs(r.end - t["end"]) / fps < 0.25, (fps, r.n, r.end, t["end"])
+            assert abs(r.descent_s - t["descent_s"]) < 0.15, (fps, r.n, r.descent_s)
+            assert abs(r.mcv_ms - t["mcv"]) / t["mcv"] < 0.08, (fps, r.n, r.mcv_ms, t["mcv"])
+        assert not [w for w in res.warnings if "looks too long" in w], res.warnings
+
+
+def test_plate_problem_detects_wrong_circle():
+    from squat_tracker.bar import plate_problem
+
+    lm, _, bar_px = make_set(SPECS, fps=30.0)
+    j = pose.joints(lm, pose.pick_side(lm))
+    n = len(bar_px)
+    good = np.column_stack([bar_px, np.full(n, 90.0)])
+    assert plate_problem(j, dict(circles=good), Config()) is None
+    # a 'plate' stuck on the rack while the lifter squats
+    rng = np.random.default_rng(0)
+    stuck = np.column_stack([np.full(n, 500.0) + rng.normal(0, 8, n), np.full(n, 400.0) + rng.normal(0, 8, n),
+                             np.full(n, 90.0)])
+    assert "shoulders" in plate_problem(j, dict(circles=stuck), Config())
+    jumpy = good.copy()
+    jumpy[::2, 2] = 60.0
+    assert "size" in plate_problem(j, dict(circles=jumpy), Config())
 
 
 def test_rep_count_and_depth():
