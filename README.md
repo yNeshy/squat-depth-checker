@@ -14,6 +14,25 @@ pip install -e .
 
 The first run downloads the MediaPipe pose model (~30 MB) to `%USERPROFILE%\.squat-track\models`.
 
+## Install (Linux / WSL Ubuntu)
+
+System packages first. MediaPipe needs the OpenGL ES/EGL libraries (otherwise it fails with
+`libGLESv2.so.2: cannot open shared object file`), and the annotated video needs ffmpeg:
+
+```bash
+sudo apt update && sudo apt install -y libgles2 libegl1
+sudo apt install -y ffmpeg
+```
+
+Then:
+
+```bash
+cd squat-tracker
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
 ## Use
 
 ```powershell
