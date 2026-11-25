@@ -1,0 +1,19 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Videos and analysis outputs (personal footage, never commit)
+assets/
+downloads/
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.pose.npz
+*.squat.json
+*.squat.csv
+*.annotated.mp4
